@@ -27,10 +27,10 @@ endif()
 set(ENABLE_LIBJPEG_TURBO_SIMD OFF CACHE BOOL "Disable JPEG turbo SIMD in vendored OpenCV" FORCE)
 
 if(MSVC)
-    set(WITH_MSMF OFF CACHE BOOL "Disable Media Foundation backend for MSVC DSHOW path" FORCE)
+    set(WITH_MSMF ON CACHE BOOL "Enable Media Foundation backend for MSVC camera capture" FORCE)
     set(WITH_DSHOW ON CACHE BOOL "Enable DirectShow backend" FORCE)
 elseif(MINGW)
-    set(WITH_MSMF OFF CACHE BOOL "Disable Media Foundation backend for MinGW toolchain" FORCE)
+    set(WITH_MSMF ON CACHE BOOL "Enable Media Foundation backend for MinGW camera capture" FORCE)
     set(WITH_DSHOW ON CACHE BOOL "Enable DirectShow backend" FORCE)
 endif()
 

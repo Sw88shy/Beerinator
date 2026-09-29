@@ -1,29 +1,46 @@
-#include "runtime/thread.h"
+#include "opencv2/highgui.hpp"
+#include "opencv2/imgproc.hpp"
 
-#include <iostream>
-#include <sstream>
-#include <iomanip>
-#include <chrono>
+#include "thread.h"
 
-static void captureThreadMain(void* arg)
+#include <thread>
+
+#define CAPTURE_METHOD cv::CAP_MSMF //CAP_DSHOW
+
+void captureThreadMain(void* arg)
 {
     CaptureThreadArgs* args = static_cast<CaptureThreadArgs*>(arg);
     AppState* app = args->app;
     CameraState* camera = args->camera;
 
-    cv::VideoCapture cap(camera->cameraIndex, cv::CAP_DSHOW);
+    cv::VideoCapture cap(camera->cameraIndex, CAPTURE_METHOD);
     if(!cap.isOpened())
     {
         std::cerr << "Failed to open camera device " << camera->cameraIndex << "." << std::endl;
         camera->failed = true;
         return;
     }
+
+    cap.set(cv::CAP_PROP_FRAME_WIDTH, 1920);
+    cap.set(cv::CAP_PROP_FRAME_HEIGHT, 1080);
+    cap.set(cv::CAP_PROP_FPS, 60);
+    std::cerr << "Camera " << camera->cameraIndex << " capture mode: "
+              << cap.get(cv::CAP_PROP_FRAME_WIDTH) << "x"
+              << cap.get(cv::CAP_PROP_FRAME_HEIGHT) << " @ "
+              << cap.get(cv::CAP_PROP_FPS) << " FPS" << std::endl;
+
     camera->opened = true;
 
     cv::Mat frame;
     using clock = std::chrono::steady_clock;
     auto lastTick = clock::now();
+    double reportedFps = cap.get(cv::CAP_PROP_FPS);
+    double maxCaptureFps = reportedFps > 0.0 && reportedFps <= 120.0 ? reportedFps : 30.0;
+    auto frameInterval = std::chrono::duration_cast<clock::duration>(
+        std::chrono::duration<double>(1.0 / maxCaptureFps));
+    auto nextFrameDeadline = lastTick;
     double fps = 0.0;
+    bool hasPreviousFrame = false;
 
     while(app->running)
     {
@@ -34,11 +51,16 @@ static void captureThreadMain(void* arg)
         }
 
         auto now = clock::now();
-        double dt = std::chrono::duration<double>(now - lastTick).count();
+        double dt = hasPreviousFrame ? std::chrono::duration<double>(now - lastTick).count() : 0.0;
         lastTick = now;
+        hasPreviousFrame = true;
         if(dt > 0.0)
         {
             double instantFps = 1.0 / dt;
+            if(instantFps > maxCaptureFps)
+            {
+                instantFps = maxCaptureFps;
+            }
             fps = (fps <= 0.0) ? instantFps : (0.90 * fps + 0.10 * instantFps);
         }
 
@@ -47,12 +69,19 @@ static void captureThreadMain(void* arg)
         camera->frameSeq++;
         camera->captureFps = fps;
         uv_mutex_unlock(&camera->frameMutex);
+
+        nextFrameDeadline += frameInterval;
+        if(nextFrameDeadline < now)
+        {
+            nextFrameDeadline = now;
+        }
+        std::this_thread::sleep_until(nextFrameDeadline);
     }
 
     cap.release();
 }
 
-static void displayThreadMain(void* arg)
+void displayThreadMain(void* arg)
 {
     AppState* app = static_cast<AppState*>(arg);
     std::vector<uint64_t> seenSeq(app->cameras.size(), 0);

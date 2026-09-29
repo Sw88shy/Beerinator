@@ -1,8 +1,7 @@
 #pragma once
 
-#include <opencv2/highgui.hpp>
-#include <opencv2/imgproc.hpp>
-#include <opencv2/videoio.hpp>
+#include "opencv2/core.hpp"
+#include "opencv2/videoio.hpp"
 
 #include "uv.h"
 
@@ -13,13 +12,13 @@
 
 struct CameraState
 {
-    int cameraIndex;
+    int cameraIndex = -1;
     std::string windowName;
 
     uv_mutex_t frameMutex{};
     cv::Mat latestFrame;
-    uint64_t frameSeq;
-    double captureFps;
+    uint64_t frameSeq = 0;
+    double captureFps = 0.0;
 
     std::atomic<bool> opened{false};
     std::atomic<bool> failed{false};
